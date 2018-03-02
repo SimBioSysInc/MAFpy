@@ -1,0 +1,8 @@
+# File formats
+*.egg-info
+*.pyc
+
+# Specific locations/files
+build
+dist
+docs/_build
