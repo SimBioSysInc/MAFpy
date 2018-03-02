@@ -1,8 +1,11 @@
 # File formats
 *.egg-info
 *.pyc
+*.csv
 
 # Specific locations/files
 build
 dist
 docs/_build
+src/makeJSON.py
+
