@@ -1,0 +1,12 @@
+# File types
+*.egg-info
+*.pyc
+*.csv
+
+# Specific files/directories
+build
+dist
+docs/_build
+cols.csv
+makeJSON.py
+

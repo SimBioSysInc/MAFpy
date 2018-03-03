@@ -39,21 +39,38 @@ except ImportError:
     from ordereddict import OrderedDict
 
 
+__columnHeaders = {}
+
 class Reader(object):
     """...
 
     Args:
         - maffile (:py:obj:`str` or :py:obj:`File`): 
         - version (:py:obj:`str`): Version required to read; Currently unused.
+        - validate (:py:obj:`bool`): Whether or not to validate the file (False speeds up file loading).
 
     Attributes:
-        - (): 
+        - file (:py:obj:`File`): 
+        - isProtected (:py:obj:`bool`): 
+        - version (:py:obj:`str`): 
+        - metadata (:py:obj:`dict`):
+        - optionalHeader (:py:obj:`list`):
     """
-    def __init__(self, maffile, version="2.4.1"):
+    def __init__(self, maffile, version="2.4.1", validate=False):
+        # Load column headers
+        global __columnHeaders
+        if version not in __columnHeaders:
+            colFile = os.path.join([os.path.dirname(os.path.realfile(__file__)),
+                                    "column_headers_%s.json"%version.replace(".","_")])
+            __columnHeaders[version] = json.load(open(colFile, "r"))
+
         super(Reader, self).__init__()
         # Local attributes
         self.file = maffile
         self.isProtected = False
+        self.version = version
+        self.metadata = {}
+        self.optionalHeaders = []
 
         # Do some processing
         if isinstance(maffile,str):
@@ -61,9 +78,155 @@ class Reader(object):
         if ".protected.maf" in self.file.name:
             self.isProtected = True
 
+        # Do validation
+        if validate:
+            validated, errs = self._validate()
+            if not validated:
+                self.file.seek(0)
+                raise Warning("MAF file did not pass validation. You can still use it, but beware. Errors:\n%s"%("\n\t".join(errs)))
+        self.file.seek(0)
+
+        # Read header
+        self._parseHeader()
+
     def __iter__(self):
         return self
 
     def next(self):
         '''Return the next record in the file'''
         pass
+
+    def _parseHeader(self):
+        # Parses the header comments in the file and stores them in the "metadata" attribute
+        for line in self.file:
+            if line[0] != "#":
+                # Extract header fields (it should be the first line after all the comments/metadata)
+                self.optionalHeaders = line.rstrip("\n").split("\t")[34:]
+
+                # Done reading header
+                break
+            else:
+                # Extract metadata (lines beginning with "#"
+                name, data = line[1:-1].split(" ")
+                self.metadata[name] = data
+
+    def _parseLine(self, line):
+        # _parseLine: Parses an individual line and returns the results in an easy to use dict format
+        pass
+
+    def _validate(self):
+        global __columnHeaders
+
+        # List of errors
+        validationErrors = []
+
+        # Go to beginning of file
+        self.file.seek(0)
+
+        # Version line
+        firstLine = next(self.file)
+        if firstLine != "#version %s\n"%(self.version):
+            validationErrors.append("Version header incorrect; expected version %s"%(self.version))
+
+        # Skip rest of comment lines
+        header = next(self.file)
+        while header[0] == "#":
+            header = next(self.file)
+        # Check for order of required fields
+        countCorrect = 0
+        headerFields = header.rstrip("\n").split("\t")
+        for index, headerInfo in __columnHeaders[self.version].items():
+            if headerFields[int(index)-1] != headerInfo["header"]:
+                validationErrors.append("Incorrect header at %s, expected: '%s' got: '%s'"%(index, headerInfo["header"], headerFields[int(index)-1]))
+            else:
+                countCorrect += 1
+        if countCorrect != len(headerFields):
+            validationErrors.append("Not all required header fields were included. %d missing"%(len(headerFields)-countcorrect))
+
+        mutationStatusIdx = None
+        validationStatusIdx = None
+        verificationStatusIdx = None
+        variantClassificationIdx = None
+        for index, headerInfo in __columnHeaders[self.version].items():
+            if headerinfo["header"] == "Mutation_Status":
+                mutationStatusIdx = int(idx)-1
+            if headerinfo["header"] == "Validation_Status":
+                validationStatusIdx = int(idx)-1
+            if headerinfo["header"] == "Verification_Status":
+                verificationStatusIdx = int(idx)-1
+            if headerinfo["header"] == "Variant_Classification":
+                variantClassificationIdx = int(idx)-1
+
+        # Check each lines for correct form
+        lineNumber = 0
+        for line in self.file:
+            ls = line.rstrip("\n").split("\t")
+
+            # Check that the somatic field  field
+            if not self.isProtected:
+                A = ls[mutationStatusIdx] == "Somatic"
+                B = ls[validationStatusIdx] == "Valid"
+                C = ls[verificationStatusIdx] == "Verified"
+                D = ls[variantClassificationIdx] in ["Frame_Shift_Del",
+                                                     "Frame_Shift_Ins",
+                                                     "In_Frame_Del",
+                                                     "In_Frame_Ins",
+                                                     "Missense_Mutation",
+                                                     "Nonsense_Mutation",
+                                                     "Silent",
+                                                     "Splice_Site",
+                                                     "Translation_Start_Site",
+                                                     "Nonstop_Mutation",
+                                                     "RNA",
+                                                     "Targeted_Region"]
+                E = ls[mutationStatusIdx] == "None"
+                F = ls[validationStatusIdx] == "Invalid"
+                somaticRule = (A and (B or C or D)) or (E and F)
+                if not somaticRule:
+                    validationErrors.append("Incorrect somatic specification on line: %d. See the MAF specification for details."%(lineNumber))
+
+            # Validate Strand
+            if ls[7] != "+":
+                validationErrors.append("Incorrect Strand on line: %d"%(lineNumber))
+
+            # Check for valid sets
+            for index, headerInfo in __columnHeaders[self.version].items():
+                if "Set" in headerInfo["enumerated"]:
+                    continue
+                elif "No" in headerInfo["enumerated"]:
+                    continue
+                elif "" == headerInfo["enumerated"]:
+                    continue
+                elif headerInfo["null"]:
+                    if ls[int(index)-1] == "":
+                        continue
+                elif headerInfo["enumerated"] == ["A","C","T","G","-"]:
+                    if not all([x in ["A","C","T","G","-"] for x in ls[int(index)-1]])
+                        validationErrors.append("Incorrect sequence value in field %s on line %d"%(headerInfo[""], lineNumber))
+                else:
+                    if ls[int(index)-1] not in headerInfo["enumerated"]:
+                        validationErrors.append("Incorrect value in field %s on line %d"%(headerInfo["header"], lineNumber))
+
+            # TODO: Additional MAF file checks
+
+            # Update current line number
+            lineNumber += 1
+
+        # Check header
+        if len(validationErrors) > 0:
+            return False, validationErrors
+        return True, None
+
+
+
+# Another name for the reader
+MAFReader = Reader
+
+
+
+if __name__ == "__main__":
+    # Parse and validate file
+    filename = sys.argv[1]
+    Reader(filename, validate=True)
+
+
