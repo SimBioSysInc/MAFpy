@@ -23,23 +23,14 @@
 # 
 
 # External Includes
-import collections
+from collections import OrderedDict
 import csv
 import json
 import os
 import re
 import sys
 
-# Internal Includes
-
-
-try:
-    from collections import OrderedDict
-except ImportError:
-    from ordereddict import OrderedDict
-
-
-__columnHeaders = {}
+_columnHeaders = {}
 
 class Reader(object):
     """...
@@ -58,11 +49,11 @@ class Reader(object):
     """
     def __init__(self, maffile, version="2.4.1", validate=False):
         # Load column headers
-        global __columnHeaders
-        if version not in __columnHeaders:
-            colFile = os.path.join([os.path.dirname(os.path.realfile(__file__)),
-                                    "column_headers_%s.json"%version.replace(".","_")])
-            __columnHeaders[version] = json.load(open(colFile, "r"))
+        global _columnHeaders
+        if version not in _columnHeaders:
+            colFile = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                   "column_headers_%s.json"%(version.replace(".","_")))
+            _columnHeaders[version] = json.load(open(colFile, "r"))
 
         super(Reader, self).__init__()
         # Local attributes
@@ -115,7 +106,7 @@ class Reader(object):
         pass
 
     def _validate(self):
-        global __columnHeaders
+        global _columnHeaders
 
         # List of errors
         validationErrors = []
@@ -135,27 +126,27 @@ class Reader(object):
         # Check for order of required fields
         countCorrect = 0
         headerFields = header.rstrip("\n").split("\t")
-        for index, headerInfo in __columnHeaders[self.version].items():
+        for index, headerInfo in _columnHeaders[self.version].items():
             if headerFields[int(index)-1] != headerInfo["header"]:
                 validationErrors.append("Incorrect header at %s, expected: '%s' got: '%s'"%(index, headerInfo["header"], headerFields[int(index)-1]))
             else:
                 countCorrect += 1
         if countCorrect != len(headerFields):
-            validationErrors.append("Not all required header fields were included. %d missing"%(len(headerFields)-countcorrect))
+            validationErrors.append("Not all required header fields were included. %d missing"%(len(headerFields)-countCorrect))
 
         mutationStatusIdx = None
         validationStatusIdx = None
         verificationStatusIdx = None
         variantClassificationIdx = None
-        for index, headerInfo in __columnHeaders[self.version].items():
-            if headerinfo["header"] == "Mutation_Status":
-                mutationStatusIdx = int(idx)-1
-            if headerinfo["header"] == "Validation_Status":
-                validationStatusIdx = int(idx)-1
-            if headerinfo["header"] == "Verification_Status":
-                verificationStatusIdx = int(idx)-1
-            if headerinfo["header"] == "Variant_Classification":
-                variantClassificationIdx = int(idx)-1
+        for index, headerInfo in _columnHeaders[self.version].items():
+            if headerInfo["header"] == "Mutation_Status":
+                mutationStatusIdx = int(index)-1
+            if headerInfo["header"] == "Validation_Status":
+                validationStatusIdx = int(index)-1
+            if headerInfo["header"] == "Verification_Status":
+                verificationStatusIdx = int(index)-1
+            if headerInfo["header"] == "Variant_Classification":
+                variantClassificationIdx = int(index)-1
 
         # Check each lines for correct form
         lineNumber = 0
@@ -190,7 +181,7 @@ class Reader(object):
                 validationErrors.append("Incorrect Strand on line: %d"%(lineNumber))
 
             # Check for valid sets
-            for index, headerInfo in __columnHeaders[self.version].items():
+            for index, headerInfo in _columnHeaders[self.version].items():
                 if "Set" in headerInfo["enumerated"]:
                     continue
                 elif "No" in headerInfo["enumerated"]:
@@ -201,7 +192,7 @@ class Reader(object):
                     if ls[int(index)-1] == "":
                         continue
                 elif headerInfo["enumerated"] == ["A","C","T","G","-"]:
-                    if not all([x in ["A","C","T","G","-"] for x in ls[int(index)-1]])
+                    if not all([x in ["A","C","T","G","-"] for x in ls[int(index)-1]]):
                         validationErrors.append("Incorrect sequence value in field %s on line %d"%(headerInfo[""], lineNumber))
                 else:
                     if ls[int(index)-1] not in headerInfo["enumerated"]:
