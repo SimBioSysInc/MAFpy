@@ -36,15 +36,15 @@ class Reader(object):
     """...
 
     Args:
-        - maffile (:py:obj:`str` or :py:obj:`File`): 
-        - version (:py:obj:`str`): Version required to read; Currently unused.
+        - maffile (:py:obj:`str` or :py:obj:`File`): Path to a file, or a file pointer.
+        - version (:py:obj:`str`): Version required to read; currently unused.
         - validate (:py:obj:`bool`): Whether or not to validate the file (False speeds up file loading).
 
     Attributes:
-        - file (:py:obj:`File`): 
-        - isProtected (:py:obj:`bool`): 
-        - version (:py:obj:`str`): 
-        - metadata (:py:obj:`dict`):
+        - file (:py:obj:`File`): Inner representation of a file
+        - isProtected (:py:obj:`bool`): Whether or not the MAF file contains personally identifiable data (e.g., ends with "*.protected.maf").
+        - version (:py:obj:`str`): Version of the file to open, defaults to 2.4.1. The reader will attempt to use the correct version, however, this is the version that will be used for validation.
+        - metadata (:py:obj:`dict`): 
         - optionalHeader (:py:obj:`list`):
     """
     def __init__(self, maffile, version="2.4.1", validate=False):
@@ -83,9 +83,11 @@ class Reader(object):
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         '''Return the next record in the file'''
-        pass
+        nextLine = next(self.file)
+        if nextLine != None:
+            self._parseLine(nextLine)
 
     def _parseHeader(self):
         # Parses the header comments in the file and stores them in the "metadata" attribute
@@ -103,7 +105,14 @@ class Reader(object):
 
     def _parseLine(self, line):
         # _parseLine: Parses an individual line and returns the results in an easy to use dict format
-        pass
+        global _columnHeaders
+        ls = line.rstrip("\n").split("\t")
+        toReturn = {}
+        for index, infoHeader in _columnHeaders[self.version]:
+            if infoHeader["header"] in ["Start_Position", "End_Position"]:
+                toReturn[infoHeader["header"]] = int(ls[int(index)-1])
+            else:
+                toReturn[infoHeader["header"]] = ls[int(index)-1]
 
     def _validate(self):
         global _columnHeaders
