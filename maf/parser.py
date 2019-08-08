@@ -87,7 +87,7 @@ class Reader(object):
         '''Return the next record in the file'''
         nextLine = next(self.file)
         if nextLine != None:
-            self._parseLine(nextLine)
+            return self._parseLine(nextLine)
 
     def _parseHeader(self):
         # Parses the header comments in the file and stores them in the "metadata" attribute
@@ -108,11 +108,12 @@ class Reader(object):
         global _columnHeaders
         ls = line.rstrip("\n").split("\t")
         toReturn = {}
-        for index, infoHeader in _columnHeaders[self.version]:
+        for index, infoHeader in _columnHeaders[self.version].items():
             if infoHeader["header"] in ["Start_Position", "End_Position"]:
                 toReturn[infoHeader["header"]] = int(ls[int(index)-1])
             else:
                 toReturn[infoHeader["header"]] = ls[int(index)-1]
+        return toReturn
 
     def _validate(self):
         global _columnHeaders

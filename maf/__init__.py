@@ -29,8 +29,8 @@ A MAFv2.4.1 parser for Python.
 """
 
 # Module publicly exposed data
-from maf.parser import Reader, Writer
-from maf.parser import MAFReader, MAFWriter
+from maf.parser import Reader#, Writer
+from maf.parser import MAFReader#, MAFWriter
 
 # Moduile version
 VERSION = '0.1.0'
